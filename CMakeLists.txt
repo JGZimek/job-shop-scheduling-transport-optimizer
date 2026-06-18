@@ -33,15 +33,15 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID}")
 
 # ===== INCLUDE DIRECTORIES =====
-include_directories(include)
+include_directories(cpp/include)
 
 # ===== SOURCE FILES =====
 file(GLOB_RECURSE CORE_SOURCES
-    src/core/*.cpp
-    src/genetic/*.cpp
-    src/greedy/*.cpp
-    src/exact/*.cpp
-    src/io/*.cpp
+    cpp/src/core/*.cpp
+    cpp/src/genetic/*.cpp
+    cpp/src/greedy/*.cpp
+    cpp/src/exact/*.cpp
+    cpp/src/io/*.cpp
 )
 
 message(STATUS "Found core sources: ${CORE_SOURCES}")
@@ -99,10 +99,10 @@ endif()
 message(STATUS "[OK] pybind11 found at: ${pybind11_DIR}")
 
 # ===== PYTHON BINDINGS MODULE =====
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bindings/bindings.cpp")
-    set(BINDING_FILE "bindings/bindings.cpp")
-elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bindings/jobshop_bindings.cpp")
-    set(BINDING_FILE "bindings/jobshop_bindings.cpp")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cpp/bindings/bindings.cpp")
+    set(BINDING_FILE "cpp/bindings/bindings.cpp")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cpp/bindings/jobshop_bindings.cpp")
+    set(BINDING_FILE "cpp/bindings/jobshop_bindings.cpp")
 else()
     message(FATAL_ERROR "Cannot find bindings file in bindings/ directory!")
 endif()
@@ -114,7 +114,7 @@ pybind11_add_module(bindings
     ${CORE_SOURCES}
 )
 
-target_include_directories(bindings PRIVATE include)
+target_include_directories(bindings PRIVATE cpp/include)
 
 set_target_properties(bindings PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/python_module"
@@ -129,12 +129,12 @@ endif()
 message(STATUS "[OK] Python module: ${CMAKE_BINARY_DIR}/python_module")
 
 # ===== CLI EXECUTABLE =====
-add_executable(jobshop_optimizer 
-    src/main.cpp
+add_executable(jobshop_optimizer
+    cpp/src/main.cpp
     ${CORE_SOURCES}
 )
 
-target_include_directories(jobshop_optimizer PRIVATE include)
+target_include_directories(jobshop_optimizer PRIVATE cpp/include)
 
 set_target_properties(jobshop_optimizer PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
