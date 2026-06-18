@@ -43,6 +43,9 @@
 # CMake build directories
 build*/
 
+# PyInstaller output (the .spec recipe itself is tracked)
+dist/
+
 # Virtual environment
 .venv/
 

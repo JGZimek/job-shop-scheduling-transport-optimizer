@@ -7,17 +7,22 @@ from pathlib import Path
 import time
 from datetime import datetime
 
-# DLL path setup
+# Frozen (PyInstaller) vs. source run: resolve resource root + import paths.
+FROZEN = getattr(sys, "frozen", False)
+if FROZEN:
+    # Bundled resources (data/, bindings.pyd, runtime DLLs) live under _MEIPASS.
+    _ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+else:
+    _ROOT = Path(__file__).parent.parent
+    sys.path.insert(0, str(_ROOT))
+    sys.path.insert(0, str(_ROOT / "build" / "python_module"))
+    sys.path.insert(0, str(Path(__file__).parent))
+
+# DLL path setup (dev machines with MSYS2 toolchain; harmless if absent / frozen)
 if sys.platform == "win32":
     msys_bin = r"C:\msys64\ucrt64\bin"
     if os.path.exists(msys_bin):
         os.add_dll_directory(msys_bin)
-
-# Make project root + build module importable
-_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(_ROOT))
-sys.path.insert(0, str(_ROOT / "build" / "python_module"))
-sys.path.insert(0, str(Path(__file__).parent))
 
 from gui import config as C
 from gui.widgets import (HeaderFrame, SidebarFrame, ConsoleFrame, GanttFrame,

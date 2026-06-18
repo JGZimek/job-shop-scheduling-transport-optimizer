@@ -3,6 +3,19 @@
 Job Shop Scheduling Problem solver with transport times. A **C++ core**
 (genetic / greedy / exact solvers) exposed to a **Python GUI** via pybind11.
 
+## Features
+
+- **Three solvers**: a genetic algorithm (population / generations / tournament /
+  mutation, with seedable RNG), a fast greedy active scheduler used as a
+  baseline, and an exact branch & bound solver for small instances.
+- **Live convergence**: the genetic solver reports its best makespan per
+  generation, plotted as a real convergence curve (not a mock-up).
+- **Interactive Gantt chart**: machine × time schedule with per-job colors,
+  dashed transport connectors between consecutive operations, and hover tooltips.
+- **Metrics**: makespan, improvement vs. baseline, runtime, generation, and
+  operation count.
+- **Export**: schedule to CSV / JSON and the Gantt chart to PNG.
+
 ## Repository structure
 
 ```
@@ -60,6 +73,40 @@ python -m gui.main
 ```
 
 The CLI solver is available at `build/bin/jobshop_optimizer`.
+
+## Standalone executable
+
+The GUI can be packaged into a single-file Windows executable with PyInstaller.
+The C++ bindings must be built first (see *Build* above), then:
+
+```bash
+pip install pyinstaller
+pyinstaller --noconfirm --workpath build/pyinstaller --distpath dist jobshop.spec
+```
+
+This produces `dist/JobShopOptimizer.exe` (~38 MB). The recipe in
+[`jobshop.spec`](jobshop.spec) bundles:
+
+- the compiled `bindings.*.pyd` and its `libwinpthread-1.dll` dependency
+  (libgcc / libstdc++ are statically linked),
+- the CustomTkinter theme/asset files and matplotlib backends,
+- the sample instances under `data/instances/`.
+
+Being a one-file build, the first launch is slightly slower (it self-extracts to
+a temp directory). The app resolves bundled resources via `sys._MEIPASS` when
+frozen, so it runs without Python or the MSYS2 toolchain installed.
+
+## Architecture
+
+```
+GUI (gui/) ──imports──> bindings.pyd ──calls──> C++ core (cpp/)
+   CustomTkinter            pybind11           genetic / greedy / exact
+```
+
+The GUI runs solvers on a worker thread and marshals results back to the Tk main
+loop through a queue (Tkinter is not thread-safe). For the genetic solver it
+then "plays back" the real per-generation history into the metrics and
+convergence chart.
 
 ## Instances
 
