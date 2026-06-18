@@ -95,6 +95,22 @@ PYBIND11_MODULE(bindings, m) {
           py::arg("seed") = 0,
           "Run genetic algorithm");
 
+    // GeneticResult: solution + per-generation convergence history
+    py::class_<GeneticResult>(m, "GeneticResult")
+        .def(py::init<>())
+        .def_readwrite("solution", &GeneticResult::solution)
+        .def_readwrite("history", &GeneticResult::history);
+
+    m.def("run_genetic_logged", &run_genetic_logged,
+          py::arg("instance"),
+          py::arg("population_size"),
+          py::arg("generations"),
+          py::arg("tournament_size"),
+          py::arg("mutation_prob"),
+          py::arg("seed") = 0,
+          "Run genetic algorithm and return the best solution together with its "
+          "best-so-far makespan after every generation (history).");
+
     // ========== GREEDY ALGORITHM ==========
     
     m.def("greedy_schedule", &greedy_schedule,

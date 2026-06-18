@@ -1,188 +1,276 @@
 import customtkinter as ctk
-from gui.config import DEFAULT_PARAMS
-from gui.dialogs.status_dialog import StatusDialog, COLOR_ERROR, COLOR_WARNING, COLOR_NORMAL
+from gui import config as C
+from gui.dialogs.status_dialog import StatusDialog
+
 
 class SidebarFrame(ctk.CTkFrame):
-    """
-    Panel boczny OPTIMIZED & ROBUST.
-    """
-    
-    def __init__(self, parent, on_instance_load=None, on_algorithm_change=None, **kwargs):
-        super().__init__(parent, fg_color="#161b22", corner_radius=12, **kwargs)
-        
+    """Lewy panel konfiguracji: instancje (presety + browse), algorytm, parametry GA."""
+
+    def __init__(self, parent, on_preset_load=None, on_instance_load=None,
+                 on_algorithm_change=None, **kwargs):
+        super().__init__(parent, fg_color=C.PANEL_BG, corner_radius=0, **kwargs)
+
+        self.on_preset_load = on_preset_load
         self.on_instance_load = on_instance_load
         self.on_algorithm_change_callback = on_algorithm_change
-        self.instance_loaded = False
+
         self.selected_algorithm = "genetic"
-        
-        # Hard Limits
-        self.constraints = {
-            "population_size": {"type": int, "min": 10, "max": 1_000_000},
-            "generations":     {"type": int, "min": 1, "max": 1_000_000},
-            "tournament_size": {"type": int, "min": 1, "max": None}, 
-            "mutation_prob":   {"type": float, "min": 0.0, "max": 1.0},
-            "seed":            {"type": int, "min": 0, "max": 4294967295}
-        }
-
-        # Soft Limits
-        self.soft_limits = {
-            "population_size": 5000, 
-            "generations":     10000,
-            "tournament_size": 500
-        }
-
-        # Layout
-        self.scrollable_frame = ctk.CTkScrollableFrame(
-            self, 
-            fg_color="#161b22",
-            scrollbar_button_color="#30363d",
-            scrollbar_button_hover_color="#484f58"
-        )
-        self.scrollable_frame.pack(fill="both", expand=True, side="top")
-        
-        self._setup_file_section()
-        self._setup_algo_section()
-        
-        self.ga_container = ctk.CTkFrame(self.scrollable_frame, fg_color="transparent")
-        self.ga_container.pack(fill="x", pady=0)
-        
-        ctk.CTkLabel(
-            self.ga_container, text="GA Parameters", 
-            font=("Segoe UI", 13, "bold"), text_color="white"
-        ).pack(anchor="w", pady=(10, 5), padx=15)
-        
+        self.selected_preset = None
+        self._preset_cards = {}
         self.params_widgets = {}
-        for param in ["population_size", "generations", "tournament_size", "mutation_prob", "seed"]:
-            self._create_param_field(param)
+        self._value_labels = {}
+        self._param_values = dict(C.DEFAULT_PARAMS)
 
+        body = ctk.CTkScrollableFrame(
+            self, fg_color=C.PANEL_BG,
+            scrollbar_button_color=C.BORDER_MED,
+            scrollbar_button_hover_color="#313c4d")
+        body.pack(fill="both", expand=True, side="top")
+        self.body = body
+
+        self._build_instance_section(body)
+        self._sep(body)
+        self._build_algo_section(body)
+        self._build_param_section(body)
         self._update_param_visibility()
 
-    def _setup_file_section(self):
-        ctk.CTkLabel(self.scrollable_frame, text="Load Instance", font=("Segoe UI", 13, "bold"), text_color="white").pack(anchor="w", pady=(15, 5), padx=15)
-        self.instance_file = ctk.CTkEntry(self.scrollable_frame, placeholder_text="No file selected", fg_color="#0d1117", state="readonly", height=30, border_color="#30363d")
-        self.instance_file.pack(fill="x", pady=3, padx=15)
-        ctk.CTkButton(self.scrollable_frame, text="Browse Files", command=self._on_browse, height=30, fg_color="#238636", hover_color="#2ea043").pack(fill="x", pady=5, padx=15)
-        ctk.CTkFrame(self.scrollable_frame, height=1, fg_color=COLOR_NORMAL).pack(fill="x", pady=15, padx=15)
+    # ---------- helpers ----------
+    def _section_label(self, parent, text):
+        ctk.CTkLabel(parent, text=text.upper(), font=C.sans(10, "bold"),
+                     text_color=C.TXT_DIM).pack(anchor="w", padx=2, pady=(2, 8))
 
-    def _setup_algo_section(self):
-        ctk.CTkLabel(self.scrollable_frame, text="Algorithm", font=("Segoe UI", 13, "bold"), text_color="white").pack(anchor="w", pady=(0, 5), padx=15)
-        self.algorithm_dropdown = ctk.CTkOptionMenu(
-            self.scrollable_frame, values=["Genetic", "Greedy", "Exact"], 
-            command=self._on_algorithm_change, height=30, fg_color="#0078ff", button_color="#0066cc"
-        )
-        self.algorithm_dropdown.set("Genetic")
-        self.algorithm_dropdown.pack(fill="x", pady=3, padx=15)
-        
-        self.exact_warning = ctk.CTkLabel(
-            self.scrollable_frame, 
-            text="Warning: Not recommended for instances > 4x3. High complexity.", 
-            text_color=COLOR_WARNING, font=("Segoe UI", 11), justify="left", wraplength=240, anchor="w"
-        )
-        self.algo_separator = ctk.CTkFrame(self.scrollable_frame, height=1, fg_color=COLOR_NORMAL)
-        self.algo_separator.pack(fill="x", pady=15, padx=15)
+    def _sep(self, parent):
+        ctk.CTkFrame(parent, height=1, fg_color=C.BORDER).pack(
+            fill="x", padx=2, pady=14)
 
-    def _create_param_field(self, param_key):
-        display = param_key.replace("_", " ").title()
-        if param_key == "seed": display = "Random Seed (0=Random)"
-        frame = ctk.CTkFrame(self.ga_container, fg_color="transparent")
-        frame.pack(fill="x", pady=2, padx=15)
-        ctk.CTkLabel(frame, text=f"{display}:", text_color="#b0b8c3", font=("Segoe UI", 11)).pack(anchor="w")
-        entry = ctk.CTkEntry(frame, fg_color="#0d1117", border_color=COLOR_NORMAL, text_color="white", height=28)
-        entry.insert(0, str(DEFAULT_PARAMS.get(param_key, 0)))
-        entry.pack(fill="x", pady=(2, 5))
-        
-        entry.bind("<FocusOut>", lambda e, k=param_key: self._validate_field_live(k))
-        entry.bind("<Return>", lambda e, k=param_key: self._validate_field_live(k))
-        self.params_widgets[param_key] = entry
+    def _bind_recursive(self, widget, handler):
+        widget.bind("<Button-1>", handler)
+        for child in widget.winfo_children():
+            self._bind_recursive(child, handler)
 
-    def _update_param_visibility(self):
-        self.ga_container.pack_forget()
-        self.exact_warning.pack_forget()
-        if self.selected_algorithm == "genetic":
-            self.ga_container.pack(fill="x", pady=0)
-        elif self.selected_algorithm == "exact":
-            self.exact_warning.pack(in_=self.scrollable_frame, before=self.algo_separator, fill="x", pady=(5, 5), padx=20)
+    # ---------- INSTANCE ----------
+    def _build_instance_section(self, parent):
+        self._section_label(parent, "Instance")
+        for preset in C.INSTANCE_PRESETS:
+            self._make_preset_card(parent, preset)
 
-    def _on_algorithm_change(self, choice):
-        self.selected_algorithm = {"Genetic": "genetic", "Greedy": "greedy", "Exact": "exact"}.get(choice, "genetic")
-        self._update_param_visibility()
-        if self.on_algorithm_change_callback: self.on_algorithm_change_callback(self.selected_algorithm)
+        browse = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=8,
+                              border_width=1, border_color="#2a3445", height=34)
+        browse.pack(fill="x", pady=(4, 0))
+        browse.pack_propagate(False)
+        lbl = ctk.CTkLabel(browse, text="+  Browse .txt / .csv",
+                           font=C.sans(11), text_color=C.TXT_MUTED)
+        lbl.place(relx=0.5, rely=0.5, anchor="center")
+        self._bind_recursive(browse, lambda e: self._on_browse())
 
-    def _validate_field_live(self, key):
-        entry = self.params_widgets.get(key)
-        raw_val = entry.get().strip()
-        constraint = self.constraints.get(key)
-        if not raw_val: return 
-        try:
-            val = int(raw_val) if constraint["type"] is int else float(raw_val.replace(",", "."))
-            if (constraint["min"] is not None and val < constraint["min"]) or \
-               (constraint["max"] is not None and val > constraint["max"]):
-                entry.configure(border_color=COLOR_ERROR)
+    def _make_preset_card(self, parent, preset):
+        card = ctk.CTkFrame(parent, fg_color="transparent", corner_radius=9,
+                            border_width=1, border_color=C.BORDER_SOFT)
+        card.pack(fill="x", pady=3)
+
+        icon = ctk.CTkFrame(card, width=26, height=26, corner_radius=6,
+                            fg_color="#141b27")
+        icon.pack(side="left", padx=(10, 0), pady=9)
+        icon.pack_propagate(False)
+        ctk.CTkLabel(icon, text=preset["glyph"], font=C.mono(10, "bold"),
+                     text_color=preset["color"]).place(relx=0.5, rely=0.5,
+                                                        anchor="center")
+
+        mid = ctk.CTkFrame(card, fg_color="transparent")
+        mid.pack(side="left", padx=11, fill="x", expand=True)
+        name = ctk.CTkLabel(mid, text=preset["name"], font=C.sans(12, "bold"),
+                            text_color=C.TXT_2, anchor="w")
+        name.pack(anchor="w")
+        ctk.CTkLabel(mid, text=f"{preset['dim']} · {preset['ops']} ops",
+                     font=C.mono(10), text_color=C.TXT_DIM,
+                     anchor="w").pack(anchor="w")
+
+        dot = ctk.CTkFrame(card, width=6, height=6, corner_radius=3,
+                           fg_color=C.BLUE)
+        # widoczność kropki sterowana przez _refresh_preset_styles
+
+        self._preset_cards[preset["key"]] = {"card": card, "name": name, "dot": dot}
+        self._bind_recursive(card, lambda e, k=preset["key"]: self._on_preset(k))
+
+    def _on_preset(self, key):
+        if self.on_preset_load:
+            ok = self.on_preset_load(key)
+            if ok:
+                self.set_active_preset(key)
+
+    def set_active_preset(self, key):
+        self.selected_preset = key
+        self._refresh_preset_styles()
+
+    def _refresh_preset_styles(self):
+        for k, refs in self._preset_cards.items():
+            active = (k == self.selected_preset)
+            refs["card"].configure(
+                fg_color="#0f1a28" if active else "transparent",
+                border_color=C.BORDER_ACTIVE if active else C.BORDER_SOFT)
+            refs["name"].configure(text_color=C.TXT if active else C.TXT_2)
+            if active:
+                refs["dot"].pack(side="right", padx=(0, 11))
             else:
-                soft = self.soft_limits.get(key)
-                entry.configure(border_color=COLOR_WARNING if soft and val > soft else COLOR_NORMAL)
-        except ValueError:
-            entry.configure(border_color=COLOR_ERROR)
-
-    def get_parameters(self):
-        if self.selected_algorithm != "genetic":
-            return {"algorithm": self.selected_algorithm}
-
-        clean_params = {"algorithm": "genetic"}
-        errors_list = []
-        warnings_list = []
-        
-        for key, widget in self.params_widgets.items():
-            raw_val = widget.get().strip()
-            constraint = self.constraints[key]
-            nice_name = key.replace("_", " ").title()
-
-            try:
-                if not raw_val: raise ValueError("Required")
-                val = int(raw_val) if constraint["type"] is int else float(raw_val.replace(",", "."))
-
-                if constraint["min"] is not None and val < constraint["min"]: raise ValueError(f"Min: {constraint['min']}")
-                if constraint["max"] is not None and val > constraint["max"]: raise ValueError(f"Max: {constraint['max']}")
-                
-                clean_params[key] = val
-                
-                soft_limit = self.soft_limits.get(key)
-                if soft_limit and val > soft_limit:
-                    warnings_list.append(f"• {nice_name}: {val} (High!)")
-
-            except ValueError as e:
-                errors_list.append(f"• {nice_name}: {str(e)}")
-                widget.configure(border_color=COLOR_ERROR)
-
-        if "population_size" in clean_params and "tournament_size" in clean_params:
-            if clean_params["tournament_size"] > clean_params["population_size"]:
-                errors_list.append("• Tournament Size > Population Size")
-                self.params_widgets["tournament_size"].configure(border_color=COLOR_ERROR)
-
-        # 1. Błędy (Blokujące - jeden przycisk OK)
-        if errors_list:
-            StatusDialog(self.winfo_toplevel(), "Configuration Error", "Please fix errors:", "\n".join(errors_list), type_="error")
-            return None 
-
-        # 2. Ostrzeżenia (Wybór - Cancel / Continue)
-        if warnings_list:
-            dialog = StatusDialog(
-                self.winfo_toplevel(), 
-                "Performance Warning", 
-                "High complexity params detected.\nOptimization may take a long time.", 
-                "\n".join(warnings_list), 
-                type_="warning"
-            )
-            # Jeśli kliknięto Cancel, dialog.result będzie False
-            if not dialog.result: 
-                return None 
-        
-        return clean_params
+                refs["dot"].pack_forget()
 
     def _on_browse(self):
         if self.on_instance_load:
             res = self.on_instance_load()
             if res:
-                self.instance_file.configure(state="normal"); self.instance_file.delete(0, "end"); self.instance_file.insert(0, res[0]); self.instance_file.configure(state="readonly"); self.instance_loaded = True
+                # browse czyści zaznaczenie presetu
+                self.selected_preset = None
+                self._refresh_preset_styles()
 
-    def get_algorithm(self): return self.selected_algorithm
+    # ---------- ALGORITHM ----------
+    def _build_algo_section(self, parent):
+        self._section_label(parent, "Algorithm")
+        self.algo_seg = ctk.CTkSegmentedButton(
+            parent, values=["Genetic", "Greedy", "Exact"],
+            command=self._on_algorithm_change,
+            fg_color=C.CARD_BG, selected_color="#1c2533",
+            selected_hover_color="#243044", unselected_color=C.CARD_BG,
+            unselected_hover_color="#141b27", text_color=C.TXT_MUTED,
+            font=C.sans(12, "bold"), corner_radius=7, border_width=2)
+        self.algo_seg.set("Genetic")
+        self.algo_seg.pack(fill="x", pady=(0, 12))
+
+    def _on_algorithm_change(self, choice):
+        self.selected_algorithm = {"Genetic": "genetic", "Greedy": "greedy",
+                                   "Exact": "exact"}.get(choice, "genetic")
+        self._update_param_visibility()
+        if self.on_algorithm_change_callback:
+            self.on_algorithm_change_callback(self.selected_algorithm)
+
+    # ---------- PARAMS ----------
+    def _build_param_section(self, parent):
+        # GA container
+        self.ga_container = ctk.CTkFrame(parent, fg_color="transparent")
+
+        head = ctk.CTkFrame(self.ga_container, fg_color="transparent")
+        head.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(head, text="GA Parameters", font=C.sans(11),
+                     text_color=C.TXT_MUTED).pack(side="left")
+        ctk.CTkLabel(head, text="genetic", font=C.mono(9),
+                     text_color=C.TXT_DIM).pack(side="right")
+
+        labels = {
+            "population_size": "Population size",
+            "generations": "Generations",
+            "tournament_size": "Tournament size",
+            "mutation_prob": "Mutation prob.",
+        }
+        for key in ["population_size", "generations", "tournament_size", "mutation_prob"]:
+            self._make_slider(self.ga_container, key, labels[key])
+
+        # seed
+        seed_box = ctk.CTkFrame(self.ga_container, fg_color="transparent")
+        seed_box.pack(fill="x", pady=(3, 0))
+        sl = ctk.CTkFrame(seed_box, fg_color="transparent")
+        sl.pack(fill="x")
+        ctk.CTkLabel(sl, text="Random Seed ", font=C.sans(11),
+                     text_color=C.TXT_3).pack(side="left")
+        ctk.CTkLabel(sl, text="(0 = random)", font=C.sans(11),
+                     text_color=C.TXT_DIM).pack(side="left")
+        self.seed_entry = ctk.CTkEntry(seed_box, fg_color=C.INPUT_BG,
+                                       border_color=C.BORDER_MED, height=34,
+                                       text_color=C.TXT, font=C.mono(12),
+                                       corner_radius=7)
+        self.seed_entry.insert(0, "0")
+        self.seed_entry.pack(fill="x", pady=(7, 0))
+
+        # Greedy note
+        self.greedy_note = ctk.CTkLabel(
+            parent, text="Greedy list scheduler — deterministic active schedule, "
+                         "no parameters. Fast baseline.",
+            font=C.sans(11), text_color=C.TXT_MUTED, justify="left",
+            wraplength=255, anchor="w", fg_color=C.CARD_BG, corner_radius=9,
+            padx=12, pady=11)
+
+        # Exact note
+        self.exact_note = ctk.CTkLabel(
+            parent, text="Exact solver (Branch & Bound). Exponential complexity — "
+                         "only safe for instances ≤ 12 operations.",
+            font=C.sans(11), text_color=C.AMBER, justify="left",
+            wraplength=255, anchor="w", fg_color="#191510", corner_radius=9,
+            padx=12, pady=11)
+
+    def _make_slider(self, parent, key, label):
+        lo, hi, step = C.PARAM_RANGES[key]
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 15))
+
+        top = ctk.CTkFrame(row, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 7))
+        ctk.CTkLabel(top, text=label, font=C.sans(11), text_color=C.TXT_3).pack(side="left")
+        val_lbl = ctk.CTkLabel(top, text=self._fmt(key, self._param_values[key]),
+                               font=C.mono(12, "bold"), text_color=C.TXT)
+        val_lbl.pack(side="right")
+        self._value_labels[key] = val_lbl
+
+        n_steps = int(round((hi - lo) / step))
+        slider = ctk.CTkSlider(
+            row, from_=lo, to=hi, number_of_steps=n_steps, height=16,
+            command=lambda v, k=key: self._on_slider(k, v),
+            progress_color=C.GREEN, button_color=C.TXT,
+            button_hover_color=C.GREEN, fg_color=C.BORDER_MED)
+        slider.set(self._param_values[key])
+        slider.pack(fill="x")
+        self.params_widgets[key] = slider
+
+    def _fmt(self, key, value):
+        if key == "mutation_prob":
+            return f"{float(value):.2f}"
+        return str(int(round(value)))
+
+    def _on_slider(self, key, value):
+        if key == "mutation_prob":
+            self._param_values[key] = round(float(value), 2)
+        else:
+            self._param_values[key] = int(round(value))
+        self._value_labels[key].configure(text=self._fmt(key, self._param_values[key]))
+
+    def _update_param_visibility(self):
+        self.ga_container.pack_forget()
+        self.greedy_note.pack_forget()
+        self.exact_note.pack_forget()
+        if self.selected_algorithm == "genetic":
+            self.ga_container.pack(fill="x", pady=0)
+        elif self.selected_algorithm == "greedy":
+            self.greedy_note.pack(fill="x", pady=0)
+        elif self.selected_algorithm == "exact":
+            self.exact_note.pack(fill="x", pady=0)
+
+    # ---------- API ----------
+    def get_algorithm(self):
+        return self.selected_algorithm
+
+    def get_parameters(self):
+        if self.selected_algorithm != "genetic":
+            return {"algorithm": self.selected_algorithm}
+
+        params = {"algorithm": "genetic"}
+        for key in ["population_size", "generations", "tournament_size"]:
+            params[key] = int(self._param_values[key])
+        params["mutation_prob"] = float(self._param_values["mutation_prob"])
+
+        # seed
+        raw = self.seed_entry.get().strip()
+        try:
+            seed = int(raw) if raw else 0
+            if seed < 0:
+                seed = 0
+        except ValueError:
+            StatusDialog(self.winfo_toplevel(), "Configuration Error",
+                         "Random seed must be a non-negative integer.",
+                         type_="error")
+            return None
+        params["seed"] = seed
+
+        # tournament nie może przekraczać populacji
+        if params["tournament_size"] > params["population_size"]:
+            params["tournament_size"] = params["population_size"]
+            self.params_widgets["tournament_size"].set(params["tournament_size"])
+            self._on_slider("tournament_size", params["tournament_size"])
+
+        return params

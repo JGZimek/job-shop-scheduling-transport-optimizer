@@ -252,8 +252,61 @@ Solution run_genetic(
         
         population = std::move(new_population);
     }
-    
+
     return best_overall;
+}
+
+// ===== GENETIC ALGORITHM WITH CONVERGENCE LOGGING =====
+
+GeneticResult run_genetic_logged(
+    const JobShopInstance& instance,
+    size_t population_size,
+    size_t generations,
+    size_t tournament_size,
+    double mutation_prob,
+    unsigned int seed) {
+
+    std::mt19937 rng(get_seed(seed));
+
+    auto population = generate_population(instance, population_size, rng());
+
+    Solution best_overall = population[0];
+    int best_makespan = calculate_makespan(instance, best_overall);
+
+    GeneticResult result;
+    result.history.reserve(generations + 1);
+    result.history.push_back(best_makespan); // best of the initial population
+
+    for (size_t gen = 0; gen < generations; ++gen) {
+        std::vector<Solution> new_population;
+        new_population.reserve(population_size);
+
+        while (new_population.size() < population_size) {
+            Solution parent1 = tournament_selection(population, instance, tournament_size, rng());
+            Solution parent2 = tournament_selection(population, instance, tournament_size, rng());
+
+            Solution child = order_crossover(parent1, parent2, rng());
+
+            std::uniform_real_distribution<double> prob_dist(0.0, 1.0);
+            if (prob_dist(rng) < mutation_prob) {
+                mutate_swap(child, rng());
+            }
+
+            int child_makespan = calculate_makespan(instance, child);
+            if (child_makespan < best_makespan) {
+                best_makespan = child_makespan;
+                best_overall = child;
+            }
+
+            new_population.push_back(std::move(child));
+        }
+
+        population = std::move(new_population);
+        result.history.push_back(best_makespan);
+    }
+
+    result.solution = best_overall;
+    return result;
 }
 
 } // namespace jobshop

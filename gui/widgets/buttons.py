@@ -1,88 +1,84 @@
 import customtkinter as ctk
+from gui import config as C
+
 
 class ButtonsFrame(ctk.CTkFrame):
-    """
-    Dolny panel z przyciskami akcji.
-    Zoptymalizowany pod kątem spójności z kompaktowym Sidebarem.
-    """
-    
+    """Sekcja akcji: Run Optimization + Clear / Export."""
+
     def __init__(self, parent, on_optimize=None, on_clear=None, on_export=None, **kwargs):
-        super().__init__(parent, **kwargs)
-        
+        super().__init__(parent, fg_color=C.PANEL_BG, corner_radius=0, **kwargs)
         self.on_optimize = on_optimize
         self.on_clear = on_clear
         self.on_export = on_export
-        
-        # Inner frame dla marginesów
-        # Zmniejszony pady z 15 na 10, aby pasował do Sidebaru
-        inner = ctk.CTkFrame(self, fg_color="#161b22")
-        inner.pack(fill="both", expand=True, padx=15, pady=10)
-        
-        # Run Optimization Button (Najważniejszy - lekko większy)
+
+        inner = ctk.CTkFrame(self, fg_color="transparent")
+        inner.pack(fill="both", expand=True, padx=16, pady=14)
+
         self.optimize_btn = ctk.CTkButton(
-            inner,
-            text="Run Optimization",
-            command=self._on_optimize_click,
-            fg_color="#238636",
-            hover_color="#2ea043",
-            height=36,  # Zoptymalizowana wysokość
-            font=("Segoe UI", 12, "bold")
-        )
-        self.optimize_btn.pack(fill="x", pady=(0, 6)) # Mniejszy odstęp
-        self.optimize_btn.configure(state="disabled")
-        
-        # Export Button
-        self.export_btn = ctk.CTkButton(
-            inner,
-            text="Export Schedule",
-            command=self._on_export_click,
-            fg_color="#0078ff",
-            hover_color="#0066cc",
-            height=32,  # Standardowa wysokość (jak w Sidebar)
-            font=("Segoe UI", 11, "bold")
-        )
-        self.export_btn.pack(fill="x", pady=(0, 6)) # Mniejszy odstęp
-        self.export_btn.configure(state="disabled")
-        
-        # Clear Results Button
+            inner, text="Run Optimization", command=self._optimize,
+            height=40, corner_radius=9, font=C.sans(13, "bold"),
+            fg_color="#161d29", hover_color="#1c2533",
+            text_color=C.TXT_DIM, border_width=1, border_color=C.BORDER_MED)
+        self.optimize_btn.pack(fill="x", pady=(0, 8))
+
+        row = ctk.CTkFrame(inner, fg_color="transparent")
+        row.pack(fill="x")
+        row.grid_columnconfigure((0, 1), weight=1)
+
         self.clear_btn = ctk.CTkButton(
-            inner,
-            text="Clear Results",
-            command=self._on_clear_click,
-            fg_color="#da3633",
-            hover_color="#f85149",
-            height=32,
-            font=("Segoe UI", 11, "bold")
-        )
-        self.clear_btn.pack(fill="x")
-    
-    def _on_optimize_click(self):
-        """Handle optimize button click"""
+            row, text="Clear", command=self._clear, height=34, corner_radius=8,
+            font=C.sans(12), fg_color="#131a25", hover_color="#1c2533",
+            text_color=C.TXT_2, border_width=1, border_color=C.BORDER_MED)
+        self.clear_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+
+        self.export_btn = ctk.CTkButton(
+            row, text="Export", command=self._export, height=34, corner_radius=8,
+            font=C.sans(12), fg_color="#131a25", hover_color="#1c2533",
+            text_color=C.TXT_FAINT, border_width=1, border_color=C.BORDER_MED)
+        self.export_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        self.export_btn.configure(state="disabled")
+
+        self.set_run_state("empty")
+
+    # ---------- click handlers ----------
+    def _optimize(self):
         if self.on_optimize:
             self.on_optimize()
-    
-    def _on_export_click(self):
-        """Handle export button click"""
-        if self.on_export:
-            self.on_export()
-    
-    def _on_clear_click(self):
-        """Handle clear button click"""
+
+    def _clear(self):
         if self.on_clear:
             self.on_clear()
-    
+
+    def _export(self):
+        if self.on_export:
+            self.on_export()
+
+    # ---------- state ----------
+    def set_run_state(self, phase, progress=None):
+        if phase in ("loaded", "done"):
+            label = "Run Again" if phase == "done" else "Run Optimization"
+            self.optimize_btn.configure(
+                state="normal", text=label, fg_color=C.RUN_GREEN,
+                hover_color=C.RUN_GREEN_HV, text_color="#ffffff",
+                border_color=C.RUN_GREEN_HV)
+        elif phase == "running":
+            txt = "Optimizing…" if progress is None else f"Optimizing… {progress}%"
+            self.optimize_btn.configure(
+                state="disabled", text=txt, fg_color="#1f2a1f",
+                text_color=C.GREEN, border_color="#1b3a22")
+        else:  # empty
+            self.optimize_btn.configure(
+                state="disabled", text="Run Optimization", fg_color="#161d29",
+                text_color=C.TXT_DIM, border_color=C.BORDER_MED)
+
     def enable_optimize(self):
-        """Enable optimize button"""
-        self.optimize_btn.configure(state="normal")
-    
+        self.set_run_state("loaded")
+
     def disable_optimize(self):
-        """Disable optimize button"""
-        self.optimize_btn.configure(state="disabled")
-    
+        self.set_run_state("empty")
+
     def enable_export(self):
-        """Enable export button"""
-        self.export_btn.configure(state="normal")
-    
+        self.export_btn.configure(state="normal", text_color=C.TXT_2)
+
     def disable_export(self):
-        """Disable export button"""
-        self.export_btn.configure(state="disabled")
+        self.export_btn.configure(state="disabled", text_color=C.TXT_FAINT)

@@ -70,6 +70,30 @@ Solution run_genetic(
     double mutation_prob,
     unsigned int seed = 0);
 
+/**
+ * Result of a genetic run that also reports its convergence history.
+ *
+ * `history[g]` holds the best makespan found up to and including generation `g`.
+ * `history[0]` is the best of the initial population, so the vector has
+ * `generations + 1` entries.
+ */
+struct GeneticResult {
+    Solution solution;
+    std::vector<int> history;
+};
+
+/**
+ * Same as run_genetic but additionally records the best-so-far makespan after
+ * every generation, enabling a real convergence curve in the GUI.
+ */
+GeneticResult run_genetic_logged(
+    const JobShopInstance& instance,
+    size_t population_size,
+    size_t generations,
+    size_t tournament_size,
+    double mutation_prob,
+    unsigned int seed = 0);
+
 } // namespace jobshop
 
 #endif // JOBSHOP_GENETIC_HPP
